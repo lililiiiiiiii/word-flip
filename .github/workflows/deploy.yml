@@ -2,7 +2,7 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [ main ] # 當推送到 main 分支時觸發
+    branches: [ main ]
 
 jobs:
   build-and-deploy:
@@ -14,7 +14,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v3
         with:
-          node-version: 18
+          node-version: 20
 
       - name: Install and Build
         run: |
@@ -25,4 +25,4 @@ jobs:
         uses: JamesIves/github-pages-deploy-action@v4
         with:
           folder: dist
-          branch: gh-pages # 自動打包並發布到 gh-pages 分支
+          branch: gh-pages
