@@ -49,7 +49,7 @@ export default function App() {
     try {
       const res = await fetch(
         `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=zh-TW&dt=t&q=${encodeURIComponent(
-          inputWord
+          inputWord.trim()
         )}`
       );
       const data = await res.json();
@@ -65,35 +65,39 @@ export default function App() {
     }
   };
 
-  // 新增/更新單字功能 (防重複邏輯)
+  // 🛡️ 新增/更新單字功能 (強制轉為小寫 + 防重複邏輯)
   const handleAddCard = (e) => {
     e.preventDefault();
-    const trimmedWord = inputWord.trim();
+    // 🔤 自動轉為全小寫並去除前後空格
+    const cleanedWord = inputWord.trim().toLowerCase();
     const trimmedTrans = inputTrans.trim();
 
-    if (!trimmedWord || !trimmedTrans) return;
+    if (!cleanedWord || !trimmedTrans) return;
 
+    // 檢查單字是否已存在
     const existingIndex = cards.findIndex(
-      (c) => c.word.toLowerCase() === trimmedWord.toLowerCase()
+      (c) => c.word.toLowerCase() === cleanedWord
     );
 
     if (existingIndex !== -1) {
+      // 若已存在：更新舊單字的釋義並置頂，不新增重複卡片
       const updatedCards = [...cards];
       const [oldCard] = updatedCards.splice(existingIndex, 1);
 
       const updatedCard = {
         ...oldCard,
-        word: trimmedWord,
+        word: cleanedWord,
         translation: trimmedTrans,
         needsReview: true,
       };
 
       setCards([updatedCard, ...updatedCards]);
-      alert(`「${trimmedWord}」已存在於單字庫，已為您更新中文釋義！`);
+      alert(`「${cleanedWord}」已存在於單字庫，已為您更新中文釋義！`);
     } else {
+      // 若不存在：建立新單字 (儲存小寫版本)
       const newCard = {
         id: Date.now(),
-        word: trimmedWord,
+        word: cleanedWord,
         translation: trimmedTrans,
         needsReview: true,
         level: 0,
@@ -167,6 +171,7 @@ export default function App() {
     document.body.removeChild(link);
   };
 
+  // 🛡️ CSV 匯入 (自動轉小寫 + 過濾重複)
   const handleImportCSV = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -183,10 +188,10 @@ export default function App() {
         if (index === 0 || !line.trim()) return;
         const parts = line.split(',');
         if (parts.length >= 2) {
-          const w = parts[0].replace(/^"|"$/g, '').trim();
+          const w = parts[0].replace(/^"|"$/g, '').trim().toLowerCase(); // 🔤 轉小寫
           const t = parts[1].replace(/^"|"$/g, '').trim();
-          if (w && t && !existingWords.has(w.toLowerCase())) {
-            existingWords.add(w.toLowerCase());
+          if (w && t && !existingWords.has(w)) {
+            existingWords.add(w);
             newImported.push({
               id: Date.now() + index,
               word: w,
@@ -200,7 +205,7 @@ export default function App() {
 
       if (newImported.length > 0) {
         setCards([...newImported, ...cards]);
-        alert(`成功匯入 ${newImported.length} 個新單字！（已自動跳過重複項目）`);
+        alert(`成功匯入 ${newImported.length} 個新單字！（已自動跳過重複項目並轉為小寫）`);
       } else {
         alert('未發現新單字（可能所有單字皆已存在於單字庫中）。');
       }
@@ -425,14 +430,11 @@ const styles = {
   listSectionTitle: { fontSize: '15px', fontWeight: '700', color: '#111827', margin: 0, textAlign: 'left' },
   vocabList: { display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '350px', overflowY: 'auto' },
   emptyListText: { fontSize: '13px', color: '#9CA3AF', textAlign: 'center', margin: '20px 0' },
-  
-  // 🎯 置左對齊的單字項目樣式
   vocabItem: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', backgroundColor: '#F9FAFB', borderRadius: '10px' },
   vocabInfo: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', flex: 1, alignItems: 'center', textAlign: 'left' },
   vocabWord: { fontSize: '15px', fontWeight: '600', color: '#111827', wordBreak: 'break-word', textAlign: 'left' },
   vocabTrans: { fontSize: '13px', color: '#6B7280', wordBreak: 'break-word', textAlign: 'left' },
   vocabActions: { display: 'flex', gap: '8px', marginLeft: '8px' },
-  
   iconActionBtn: { border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '15px' },
   deleteActionBtn: { border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '15px' },
   flashcardSection: { display: 'flex', flexDirection: 'column', gap: '12px' },
