@@ -1,20 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('library'); // 'library' (單字庫) 或 'quiz' (翻牌測驗)
+  const [activeTab, setActiveTab] = useState('library'); // 'library' 或 'quiz'
   
-  // 單字庫資料
   const [cards, setCards] = useState(() => {
     const saved = localStorage.getItem('flashcards_v3');
     return saved ? JSON.parse(saved) : [];
   });
 
-  // 輸入與翻譯區狀態 (合併手動與自動)
   const [inputWord, setInputWord] = useState('');
   const [inputTrans, setInputTrans] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // 測驗區狀態
   const [filterMode, setFilterMode] = useState('ALL');
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
@@ -32,7 +29,6 @@ export default function App() {
 
   const currentCard = displayCards[currentIndex];
 
-  // 語音發音
   const speak = (text) => {
     if (!text) return;
     window.speechSynthesis.cancel();
@@ -41,14 +37,12 @@ export default function App() {
     window.speechSynthesis.speak(utterance);
   };
 
-  // 切換卡片時自動發音 (僅在測驗分頁啟用)
   useEffect(() => {
     if (activeTab === 'quiz' && currentCard && !isFlipped) {
       speak(currentCard.word);
     }
   }, [currentIndex, filterMode, activeTab]);
 
-  // Google 免費代理翻譯
   const handleTranslate = async () => {
     if (!inputWord.trim()) return;
     setLoading(true);
@@ -60,7 +54,7 @@ export default function App() {
       );
       const data = await res.json();
       if (data && data[0] && data[0][0] && data[0][0][0]) {
-        setInputTrans(data[0][0][0]); // 自動填入翻譯結果，使用者可再自訂修改
+        setInputTrans(data[0][0][0]);
       } else {
         setInputTrans('查無翻譯');
       }
@@ -71,7 +65,6 @@ export default function App() {
     }
   };
 
-  // 合併新增單字功能
   const handleAddCard = (e) => {
     e.preventDefault();
     if (!inputWord.trim() || !inputTrans.trim()) return;
@@ -89,7 +82,6 @@ export default function App() {
     setInputTrans('');
   };
 
-  // 刪除單字
   const handleDeleteCard = (id) => {
     const updated = cards.filter((c) => c.id !== id);
     setCards(updated);
@@ -98,7 +90,6 @@ export default function App() {
     }
   };
 
-  // 隨機洗牌
   const handleShuffle = () => {
     if (displayCards.length <= 1) return;
     const shuffled = [...cards];
@@ -112,7 +103,6 @@ export default function App() {
     if (shuffled[0]) speak(shuffled[0].word);
   };
 
-  // 記憶反饋
   const handleMemoryFeedback = (quality) => {
     if (!currentCard) return;
     let newLevel = currentCard.level || 0;
@@ -135,7 +125,6 @@ export default function App() {
     }
   };
 
-  // 匯出 CSV
   const handleExportCSV = () => {
     if (cards.length === 0) return alert('尚無單字可匯出');
     let csvContent = "\uFEFF英文,中文\n";
@@ -155,7 +144,6 @@ export default function App() {
     document.body.removeChild(link);
   };
 
-  // 匯入 CSV
   const handleImportCSV = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -200,7 +188,6 @@ export default function App() {
         <header style={styles.header}>
           <h1 style={styles.brandTitle}>WordFlip</h1>
           
-          {/* 主分頁導覽列 */}
           <nav style={styles.mainNav}>
             <button
               style={activeTab === 'library' ? styles.mainNavActive : styles.mainNavBtn}
@@ -217,14 +204,11 @@ export default function App() {
           </nav>
         </header>
 
-        {/* ==================== 分頁一：單字庫管理 ==================== */}
         {activeTab === 'library' && (
           <div style={styles.tabContent}>
-            {/* 新增/查詢卡片 */}
             <form onSubmit={handleAddCard} style={styles.inputCard}>
               <h3 style={styles.cardSectionTitle}>新增單字</h3>
               
-              {/* 英文輸入 + 查詢按鈕 */}
               <div style={styles.inputRow}>
                 <input
                   type="text"
@@ -244,7 +228,6 @@ export default function App() {
                 </button>
               </div>
 
-              {/* 中文釋義輸入框（可自動填入，也可手動修改） */}
               <div style={styles.inputRow}>
                 <input
                   type="text"
@@ -269,7 +252,6 @@ export default function App() {
               </button>
             </form>
 
-            {/* 所有單字列表 */}
             <section style={styles.listSection}>
               <div style={styles.listHeader}>
                 <h3 style={styles.listSectionTitle}>所有單字</h3>
@@ -297,7 +279,6 @@ export default function App() {
           </div>
         )}
 
-        {/* ==================== 分頁二：翻牌測驗 ==================== */}
         {activeTab === 'quiz' && (
           <div style={styles.tabContent}>
             {cards.length === 0 ? (
@@ -333,7 +314,6 @@ export default function App() {
                       }}
                       onClick={() => setIsFlipped(!isFlipped)}
                     >
-                      {/* 正面 */}
                       <div style={{ ...styles.cardFace, ...styles.cardFront }}>
                         <span style={styles.cardWord}>{currentCard?.word}</span>
                         <button onClick={(e) => { e.stopPropagation(); speak(currentCard?.word); }} style={styles.speakerPill}>
@@ -342,13 +322,11 @@ export default function App() {
                         <span style={styles.flipHint}>點擊翻牌</span>
                       </div>
 
-                      {/* 背面 */}
                       <div style={{ ...styles.cardFace, ...styles.cardBack }}>
                         <span style={styles.cardTranslation}>{currentCard?.translation}</span>
                       </div>
                     </div>
 
-                    {/* 評估或導覽 */}
                     {isFlipped ? (
                       <div style={styles.feedbackGroup}>
                         <button onClick={() => handleMemoryFeedback('HARD')} style={styles.btnHard}>忘記</button>
@@ -381,7 +359,6 @@ export default function App() {
           </div>
         )}
 
-        {/* 底部 CSV 備份管理 */}
         <footer style={styles.footer}>
           <div style={styles.csvActions}>
             <button onClick={handleExportCSV} style={styles.footerLink}>匯出 CSV 備份</button>
@@ -401,14 +378,13 @@ export default function App() {
   );
 }
 
-// 精緻極簡樣式表
 const styles = {
   appContainer: { backgroundColor: '#F9FAFB', minHeight: '100vh', display: 'flex', justifyContent: 'center', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' },
   mainContent: { width: '100%', maxWidth: '420px', padding: '24px 16px', display: 'flex', flexDirection: 'column', gap: '16px' },
   header: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' },
   brandTitle: { fontSize: '28px', fontWeight: '800', color: '#111827', margin: 0, letterSpacing: '-0.5px' },
   mainNav: { display: 'flex', backgroundColor: '#E5E7EB', borderRadius: '12px', padding: '4px', width: '100%' },
-  mainNavBtn: { flex: 1, padding: '10px 0', border: 'none', background: 'transparent', color: '#6B7280', fontWeight: '600', fontSize: '14px', borderRadius: '8px', cursor: 'pointer', transition: 'all 0.2s' },
+  mainNavBtn: { flex: 1, padding: '10px 0', border: 'none', background: 'transparent', color: '#6B7280', fontWeight: '600', fontSize: '14px', borderRadius: '8px', cursor: 'pointer' },
   mainNavActive: { flex: 1, padding: '10px 0', border: 'none', background: '#FFFFFF', color: '#111827', fontWeight: '700', fontSize: '14px', borderRadius: '8px', cursor: 'pointer', boxShadow: '0 2px 6px rgba(0,0,0,0.06)' },
   tabContent: { display: 'flex', flexDirection: 'column', gap: '16px' },
   cardSectionTitle: { fontSize: '15px', fontWeight: '700', color: '#111827', margin: '0 0 12px 0' },
@@ -423,11 +399,14 @@ const styles = {
   listSectionTitle: { fontSize: '15px', fontWeight: '700', color: '#111827', margin: 0 },
   vocabList: { display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '350px', overflowY: 'auto' },
   emptyListText: { fontSize: '13px', color: '#9CA3AF', textAlign: 'center', margin: '20px 0' },
+  
+  // 🎯 已優化對齊的單字項目與資訊欄位：
   vocabItem: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', backgroundColor: '#F9FAFB', borderRadius: '10px' },
-  vocabInfo: { display: 'flex', flexDirection: 'column', gap: '2px' },
-  vocabWord: { fontSize: '15px', fontWeight: '600', color: '#111827' },
-  vocabTrans: { fontSize: '13px', color: '#6B7280' },
-  vocabActions: { display: 'flex', gap: '8px' },
+  vocabInfo: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', flex: 1, alignItems: 'center' },
+  vocabWord: { fontSize: '15px', fontWeight: '600', color: '#111827', wordBreak: 'break-word' },
+  vocabTrans: { fontSize: '13px', color: '#6B7280', wordBreak: 'break-word' },
+  vocabActions: { display: 'flex', gap: '8px', marginLeft: '8px' },
+  
   iconActionBtn: { border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '15px' },
   deleteActionBtn: { border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '15px' },
   flashcardSection: { display: 'flex', flexDirection: 'column', gap: '12px' },
