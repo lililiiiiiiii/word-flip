@@ -43,32 +43,52 @@ export default function App() {
     }
   }, [currentIndex, filterMode, activeTab]);
 
+  // 🌐 雙備援翻譯機制（Google + MyMemory）
   const handleTranslate = async () => {
-    if (!inputWord.trim()) return;
+    const cleanedWord = inputWord.trim();
+    if (!cleanedWord) return;
     setLoading(true);
+
     try {
-      const res = await fetch(
-        `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=zh-TW&dt=t&q=${encodeURIComponent(
-          inputWord.trim()
-        )}`
-      );
-      const data = await res.json();
-      if (data && data[0] && data[0][0] && data[0][0][0]) {
-        setInputTrans(data[0][0][0]);
-      } else {
-        setInputTrans('查無翻譯');
+      // 方案 1: 使用 corsproxy 繞過 CORS 存取 Google Translate
+      const googleUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=zh-TW&dt=t&q=${encodeURIComponent(cleanedWord)}`;
+      const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(googleUrl)}`;
+
+      const res = await fetch(proxyUrl);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data[0] && data[0][0] && data[0][0][0]) {
+          setInputTrans(data[0][0][0]);
+          setLoading(false);
+          return;
+        }
       }
+      throw new Error('Google Translate Response Error');
     } catch (err) {
-      setInputTrans('翻譯失敗');
-    } finally {
-      setLoading(false);
+      console.warn('Google 翻譯失敗，自動切換至備用 API (MyMemory)...');
+      
+      // 方案 2: 自動降級備援方案 (MyMemory API)
+      try {
+        const backupRes = await fetch(
+          `https://api.mymemory.translated.net/get?q=${encodeURIComponent(cleanedWord)}&langpair=en|zh-TW`
+        );
+        const backupData = await backupRes.json();
+        if (backupData.responseData?.translatedText) {
+          setInputTrans(backupData.responseData.translatedText);
+        } else {
+          setInputTrans('查無翻譯');
+        }
+      } catch (backupErr) {
+        setInputTrans('翻譯失敗，請手動輸入釋義');
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
   // 🛡️ 新增/更新單字功能 (強制轉為小寫 + 防重複邏輯)
   const handleAddCard = (e) => {
     e.preventDefault();
-    // 🔤 自動轉為全小寫並去除前後空格
     const cleanedWord = inputWord.trim().toLowerCase();
     const trimmedTrans = inputTrans.trim();
 
@@ -94,7 +114,7 @@ export default function App() {
       setCards([updatedCard, ...updatedCards]);
       alert(`「${cleanedWord}」已存在於單字庫，已為您更新中文釋義！`);
     } else {
-      // 若不存在：建立新單字 (儲存小寫版本)
+      // 若不存在：建立新單字
       const newCard = {
         id: Date.now(),
         word: cleanedWord,
@@ -188,7 +208,7 @@ export default function App() {
         if (index === 0 || !line.trim()) return;
         const parts = line.split(',');
         if (parts.length >= 2) {
-          const w = parts[0].replace(/^"|"$/g, '').trim().toLowerCase(); // 🔤 轉小寫
+          const w = parts[0].replace(/^"|"$/g, '').trim().toLowerCase();
           const t = parts[1].replace(/^"|"$/g, '').trim();
           if (w && t && !existingWords.has(w)) {
             existingWords.add(w);
