@@ -65,19 +65,45 @@ export default function App() {
     }
   };
 
+  // 🛡️ 新增/更新單字功能 (含單筆防重複邏輯)
   const handleAddCard = (e) => {
     e.preventDefault();
-    if (!inputWord.trim() || !inputTrans.trim()) return;
-    
-    const newCard = {
-      id: Date.now(),
-      word: inputWord.trim(),
-      translation: inputTrans.trim(),
-      needsReview: true,
-      level: 0,
-    };
+    const trimmedWord = inputWord.trim();
+    const trimmedTrans = inputTrans.trim();
 
-    setCards([newCard, ...cards]);
+    if (!trimmedWord || !trimmedTrans) return;
+
+    // 檢查單字是否已存在 (不區分大小寫)
+    const existingIndex = cards.findIndex(
+      (c) => c.word.toLowerCase() === trimmedWord.toLowerCase()
+    );
+
+    if (existingIndex !== -1) {
+      // 若已存在：更新舊單字的釋義並置頂，不新增重複卡片
+      const updatedCards = [...cards];
+      const [oldCard] = updatedCards.splice(existingIndex, 1);
+
+      const updatedCard = {
+        ...oldCard,
+        word: trimmedWord,
+        translation: trimmedTrans,
+        needsReview: true,
+      };
+
+      setCards([updatedCard, ...updatedCards]);
+      alert(`「${trimmedWord}」已存在於單字庫，已為您更新中文釋義！`);
+    } else {
+      // 若不存在：建立新單字
+      const newCard = {
+        id: Date.now(),
+        word: trimmedWord,
+        translation: trimmedTrans,
+        needsReview: true,
+        level: 0,
+      };
+      setCards([newCard, ...cards]);
+    }
+
     setInputWord('');
     setInputTrans('');
   };
@@ -144,6 +170,7 @@ export default function App() {
     document.body.removeChild(link);
   };
 
+  // 🛡️ CSV 匯入 (自動過濾重複單字)
   const handleImportCSV = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -152,7 +179,9 @@ export default function App() {
     reader.onload = (event) => {
       const text = event.target.result;
       const lines = text.split(/\r\n|\n/);
-      const importedCards = [];
+      const newImported = [];
+
+      const existingWords = new Set(cards.map((c) => c.word.toLowerCase()));
 
       lines.forEach((line, index) => {
         if (index === 0 || !line.trim()) return;
@@ -160,8 +189,9 @@ export default function App() {
         if (parts.length >= 2) {
           const w = parts[0].replace(/^"|"$/g, '').trim();
           const t = parts[1].replace(/^"|"$/g, '').trim();
-          if (w && t) {
-            importedCards.push({
+          if (w && t && !existingWords.has(w.toLowerCase())) {
+            existingWords.add(w.toLowerCase());
+            newImported.push({
               id: Date.now() + index,
               word: w,
               translation: t,
@@ -172,11 +202,11 @@ export default function App() {
         }
       });
 
-      if (importedCards.length > 0) {
-        setCards([...importedCards, ...cards]);
-        alert(`成功匯入 ${importedCards.length} 個單字！`);
+      if (newImported.length > 0) {
+        setCards([...newImported, ...cards]);
+        alert(`成功匯入 ${newImported.length} 個新單字！（已自動跳過重複項目）`);
       } else {
-        alert('匯入失敗，請確認 CSV 格式包含「英文,中文」欄位。');
+        alert('未發現新單字（可能所有單字皆已存在於單字庫中）。');
       }
     };
     reader.readAsText(file, 'UTF-8');
@@ -399,14 +429,11 @@ const styles = {
   listSectionTitle: { fontSize: '15px', fontWeight: '700', color: '#111827', margin: 0 },
   vocabList: { display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '350px', overflowY: 'auto' },
   emptyListText: { fontSize: '13px', color: '#9CA3AF', textAlign: 'center', margin: '20px 0' },
-  
-  // 🎯 已優化對齊的單字項目與資訊欄位：
   vocabItem: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', backgroundColor: '#F9FAFB', borderRadius: '10px' },
   vocabInfo: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', flex: 1, alignItems: 'center' },
   vocabWord: { fontSize: '15px', fontWeight: '600', color: '#111827', wordBreak: 'break-word' },
   vocabTrans: { fontSize: '13px', color: '#6B7280', wordBreak: 'break-word' },
   vocabActions: { display: 'flex', gap: '8px', marginLeft: '8px' },
-  
   iconActionBtn: { border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '15px' },
   deleteActionBtn: { border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '15px' },
   flashcardSection: { display: 'flex', flexDirection: 'column', gap: '12px' },
