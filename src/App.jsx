@@ -37,56 +37,59 @@ export default function App() {
     window.speechSynthesis.speak(utterance);
   };
 
+  // 切換卡片時自動發音，並確保卡片翻回正面
   useEffect(() => {
-    if (activeTab === 'quiz' && currentCard && !isFlipped) {
+    if (activeTab === 'quiz' && currentCard) {
+      setIsFlipped(false); // 每次切換卡片均確保為正面
       speak(currentCard.word);
     }
   }, [currentIndex, filterMode, activeTab]);
 
-  // 🌐 雙備援翻譯機制（Google + MyMemory）
+  // 🌐 穩定直連翻譯機制 (Google Translate Web API)
   const handleTranslate = async () => {
     const cleanedWord = inputWord.trim();
     if (!cleanedWord) return;
     setLoading(true);
 
     try {
-      // 方案 1: 使用 corsproxy 繞過 CORS 存取 Google Translate
-      const googleUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=zh-TW&dt=t&q=${encodeURIComponent(cleanedWord)}`;
-      const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(googleUrl)}`;
-
-      const res = await fetch(proxyUrl);
+      // 直連 Google 官方 translate_a 介面 (不需要第三方 CORS 代理)
+      const res = await fetch(
+        `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=zh-TW&dt=t&q=${encodeURIComponent(cleanedWord)}`
+      );
       if (res.ok) {
         const data = await res.json();
-        if (data && data[0] && data[0][0] && data[0][0][0]) {
-          setInputTrans(data[0][0][0]);
-          setLoading(false);
-          return;
+        // 提取主要翻譯結果
+        if (data && data[0] && Array.isArray(data[0])) {
+          const translatedText = data[0].map((item) => item[0]).join('');
+          if (translatedText) {
+            setInputTrans(translatedText);
+            setLoading(false);
+            return;
+          }
         }
       }
-      throw new Error('Google Translate Response Error');
+      throw new Error('Google Translate failed');
     } catch (err) {
-      console.warn('Google 翻譯失敗，自動切換至備用 API (MyMemory)...');
-      
-      // 方案 2: 自動降級備援方案 (MyMemory API)
+      console.warn('Google 翻譯失敗，改用 MyMemory API...');
       try {
         const backupRes = await fetch(
           `https://api.mymemory.translated.net/get?q=${encodeURIComponent(cleanedWord)}&langpair=en|zh-TW`
         );
         const backupData = await backupRes.json();
-        if (backupData.responseData?.translatedText) {
+        if (backupData?.responseData?.translatedText) {
           setInputTrans(backupData.responseData.translatedText);
         } else {
-          setInputTrans('查無翻譯');
+          setInputTrans('');
         }
       } catch (backupErr) {
-        setInputTrans('翻譯失敗，請手動輸入釋義');
+        setInputTrans('');
       } finally {
         setLoading(false);
       }
     }
   };
 
-  // 🛡️ 新增/更新單字功能 (強制轉為小寫 + 防重複邏輯)
+  // 🛡️ 新增/更新單字功能 (強制轉小寫 + 防重複邏輯)
   const handleAddCard = (e) => {
     e.preventDefault();
     const cleanedWord = inputWord.trim().toLowerCase();
@@ -94,13 +97,11 @@ export default function App() {
 
     if (!cleanedWord || !trimmedTrans) return;
 
-    // 檢查單字是否已存在
     const existingIndex = cards.findIndex(
       (c) => c.word.toLowerCase() === cleanedWord
     );
 
     if (existingIndex !== -1) {
-      // 若已存在：更新舊單字的釋義並置頂，不新增重複卡片
       const updatedCards = [...cards];
       const [oldCard] = updatedCards.splice(existingIndex, 1);
 
@@ -112,9 +113,8 @@ export default function App() {
       };
 
       setCards([updatedCard, ...updatedCards]);
-      alert(`「${cleanedWord}」已存在於單字庫，已為您更新中文釋義！`);
+      alert(`「${cleanedWord}」已存在於單字庫，已更新中文釋義！`);
     } else {
-      // 若不存在：建立新單字
       const newCard = {
         id: Date.now(),
         word: cleanedWord,
@@ -150,8 +150,13 @@ export default function App() {
     if (shuffled[0]) speak(shuffled[0].word);
   };
 
+  // 🎯 記憶反饋：先翻回正面再切換至下一張卡片
   const handleMemoryFeedback = (quality) => {
     if (!currentCard) return;
+
+    // 1. 先重置翻牌狀態為正面 (正面 = false)
+    setIsFlipped(false);
+
     let newLevel = currentCard.level || 0;
     if (quality === 'HARD') newLevel = 0;
     else if (quality === 'GOOD') newLevel = Math.max(1, newLevel);
@@ -163,13 +168,15 @@ export default function App() {
     );
 
     setCards(updatedCards);
-    setIsFlipped(false);
 
-    if (currentIndex < displayCards.length - 1) {
-      setCurrentIndex((prev) => prev + 1);
-    } else {
-      setCurrentIndex(0);
-    }
+    // 2. 延遲小段時間切換索引，確保翻牌動畫流暢不露餡
+    setTimeout(() => {
+      if (currentIndex < displayCards.length - 1) {
+        setCurrentIndex((prev) => prev + 1);
+      } else {
+        setCurrentIndex(0);
+      }
+    }, 100);
   };
 
   const handleExportCSV = () => {
@@ -191,7 +198,6 @@ export default function App() {
     document.body.removeChild(link);
   };
 
-  // 🛡️ CSV 匯入 (自動轉小寫 + 過濾重複)
   const handleImportCSV = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -225,7 +231,7 @@ export default function App() {
 
       if (newImported.length > 0) {
         setCards([...newImported, ...cards]);
-        alert(`成功匯入 ${newImported.length} 個新單字！（已自動跳過重複項目並轉為小寫）`);
+        alert(`成功匯入 ${newImported.length} 個新單字！`);
       } else {
         alert('未發現新單字（可能所有單字皆已存在於單字庫中）。');
       }
@@ -359,6 +365,7 @@ export default function App() {
                 ) : (
                   <>
                     <div 
+                      key={currentCard?.id}
                       style={{
                         ...styles.card3D,
                         transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
