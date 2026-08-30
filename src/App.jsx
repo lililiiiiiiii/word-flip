@@ -1,20 +1,23 @@
 import React, { useState, useEffect, useRef } from 'react';
 
 export default function App() {
-  const [word, setWord] = useState('');
-  const [translation, setTranslation] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState('library'); // 'library' (單字庫) 或 'quiz' (翻牌測驗)
+  
+  // 單字庫資料
   const [cards, setCards] = useState(() => {
     const saved = localStorage.getItem('flashcards_v3');
     return saved ? JSON.parse(saved) : [];
   });
+
+  // 輸入與翻譯區狀態 (合併手動與自動)
+  const [inputWord, setInputWord] = useState('');
+  const [inputTrans, setInputTrans] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  // 測驗區狀態
   const [filterMode, setFilterMode] = useState('ALL');
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
-
-  // 手動新增單字用
-  const [manualWord, setManualWord] = useState('');
-  const [manualTrans, setManualTrans] = useState('');
 
   const fileInputRef = useRef(null);
 
@@ -38,66 +41,52 @@ export default function App() {
     window.speechSynthesis.speak(utterance);
   };
 
-  // 🔊 切換卡片時自動發音
+  // 切換卡片時自動發音 (僅在測驗分頁啟用)
   useEffect(() => {
-    if (currentCard && !isFlipped) {
+    if (activeTab === 'quiz' && currentCard && !isFlipped) {
       speak(currentCard.word);
     }
-  }, [currentIndex, filterMode]);
+  }, [currentIndex, filterMode, activeTab]);
 
-  // 🌐 方案 B：使用 Google Translate 免費代理 API 進行自動翻譯
+  // Google 免費代理翻譯
   const handleTranslate = async () => {
-    if (!word.trim()) return;
+    if (!inputWord.trim()) return;
     setLoading(true);
     try {
       const res = await fetch(
         `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=zh-TW&dt=t&q=${encodeURIComponent(
-          word
+          inputWord
         )}`
       );
       const data = await res.json();
-      // Google 傳回結構中的第一個元素即為中文翻譯
       if (data && data[0] && data[0][0] && data[0][0][0]) {
-        setTranslation(data[0][0][0]);
+        setInputTrans(data[0][0][0]); // 自動填入翻譯結果，使用者可再自訂修改
       } else {
-        setTranslation('查無翻譯');
+        setInputTrans('查無翻譯');
       }
     } catch (err) {
-      setTranslation('翻譯失敗，請重試');
+      setInputTrans('翻譯失敗');
     } finally {
       setLoading(false);
     }
   };
 
-  // 新增翻譯單字
-  const handleAddCard = () => {
-    if (!word || !translation) return;
-    const newCard = {
-      id: Date.now(),
-      word,
-      translation,
-      needsReview: true,
-      level: 0,
-    };
-    setCards([newCard, ...cards]);
-    setWord('');
-    setTranslation('');
-  };
-
-  // 手動在清單中新增單字
-  const handleManualAddCard = (e) => {
+  // 合併新增單字功能
+  const handleAddCard = (e) => {
     e.preventDefault();
-    if (!manualWord.trim() || !manualTrans.trim()) return;
+    if (!inputWord.trim() || !inputTrans.trim()) return;
+    
     const newCard = {
       id: Date.now(),
-      word: manualWord.trim(),
-      translation: manualTrans.trim(),
+      word: inputWord.trim(),
+      translation: inputTrans.trim(),
       needsReview: true,
       level: 0,
     };
+
     setCards([newCard, ...cards]);
-    setManualWord('');
-    setManualTrans('');
+    setInputWord('');
+    setInputTrans('');
   };
 
   // 刪除單字
@@ -210,156 +199,187 @@ export default function App() {
       <main style={styles.mainContent}>
         <header style={styles.header}>
           <h1 style={styles.brandTitle}>WordFlip</h1>
+          
+          {/* 主分頁導覽列 */}
+          <nav style={styles.mainNav}>
+            <button
+              style={activeTab === 'library' ? styles.mainNavActive : styles.mainNavBtn}
+              onClick={() => setActiveTab('library')}
+            >
+              📚 單字庫 ({cards.length})
+            </button>
+            <button
+              style={activeTab === 'quiz' ? styles.mainNavActive : styles.mainNavBtn}
+              onClick={() => setActiveTab('quiz')}
+            >
+              🗂️ 翻牌測驗
+            </button>
+          </nav>
         </header>
 
-        {/* 搜尋/自動翻譯 */}
-        <div style={styles.inputCard}>
-          <div style={styles.inputGroup}>
-            <input
-              type="text"
-              value={word}
-              onChange={(e) => setWord(e.target.value)}
-              placeholder="輸入英文單字自動翻譯..."
-              style={styles.cleanInput}
-              onKeyDown={(e) => e.key === 'Enter' && handleTranslate()}
-            />
-            <button onClick={handleTranslate} style={styles.btnIcon} disabled={loading}>
-              {loading ? '...' : '🔍'}
-            </button>
-          </div>
-
-          {translation && (
-            <div style={styles.transResult}>
-              <div style={styles.transHeader}>
-                <span style={styles.transText}>{translation}</span>
-                <button onClick={() => speak(word)} style={styles.audioBtn}>🔊 發音</button>
+        {/* ==================== 分頁一：單字庫管理 ==================== */}
+        {activeTab === 'library' && (
+          <div style={styles.tabContent}>
+            {/* 新增/查詢卡片 */}
+            <form onSubmit={handleAddCard} style={styles.inputCard}>
+              <h3 style={styles.cardSectionTitle}>新增單字</h3>
+              
+              {/* 英文輸入 + 查詢按鈕 */}
+              <div style={styles.inputRow}>
+                <input
+                  type="text"
+                  value={inputWord}
+                  onChange={(e) => setInputWord(e.target.value)}
+                  placeholder="輸入英文單字/片語..."
+                  style={styles.cleanInput}
+                  onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleTranslate())}
+                />
+                <button
+                  type="button"
+                  onClick={handleTranslate}
+                  style={styles.btnTranslate}
+                  disabled={loading}
+                >
+                  {loading ? '...' : '🔍 翻譯'}
+                </button>
               </div>
-              <button onClick={handleAddCard} style={styles.btnFull}>➕ 加入單字庫</button>
-            </div>
-          )}
-        </div>
 
-        {/* 翻牌練習區 */}
-        {cards.length > 0 && (
-          <section style={styles.flashcardSection}>
-            <div style={styles.tabBar}>
-              <div style={styles.tabGroup}>
-                <span 
-                  style={filterMode === 'ALL' ? styles.activeTab : styles.tab}
-                  onClick={() => { setFilterMode('ALL'); setCurrentIndex(0); }}
-                >
-                  全部 ({cards.length})
-                </span>
-                <span 
-                  style={filterMode === 'NEEDS_REVIEW' ? styles.activeTab : styles.tab}
-                  onClick={() => { setFilterMode('NEEDS_REVIEW'); setCurrentIndex(0); }}
-                >
-                  待複習 ({cards.filter(c => c.needsReview).length})
-                </span>
-              </div>
-              <button onClick={handleShuffle} style={styles.textBtn}>🔀 洗牌</button>
-            </div>
-
-            {displayCards.length === 0 ? (
-              <div style={styles.emptyState}>進度達成！目前無待複習單字 ✨</div>
-            ) : (
-              <>
-                <div 
-                  style={{
-                    ...styles.card3D,
-                    transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
-                  }}
-                  onClick={() => setIsFlipped(!isFlipped)}
-                >
-                  {/* 正面 */}
-                  <div style={{ ...styles.cardFace, ...styles.cardFront }}>
-                    <span style={styles.cardWord}>{currentCard?.word}</span>
-                    <button onClick={(e) => { e.stopPropagation(); speak(currentCard?.word); }} style={styles.speakerPill}>
-                      🔊 重播發音
-                    </button>
-                    <span style={styles.flipHint}>點擊翻牌</span>
-                  </div>
-
-                  {/* 背面 */}
-                  <div style={{ ...styles.cardFace, ...styles.cardBack }}>
-                    <span style={styles.cardTranslation}>{currentCard?.translation}</span>
-                  </div>
-                </div>
-
-                {/* 評估或導覽 */}
-                {isFlipped ? (
-                  <div style={styles.feedbackGroup}>
-                    <button onClick={() => handleMemoryFeedback('HARD')} style={styles.btnHard}>忘記</button>
-                    <button onClick={() => handleMemoryFeedback('GOOD')} style={styles.btnGood}>模糊</button>
-                    <button onClick={() => handleMemoryFeedback('EASY')} style={styles.btnEasy}>精通</button>
-                  </div>
-                ) : (
-                  <div style={styles.navRow}>
-                    <button 
-                      disabled={currentIndex === 0} 
-                      onClick={() => { setIsFlipped(false); setCurrentIndex(p => p - 1); }} 
-                      style={styles.navBtn}
-                    >
-                      ←
-                    </button>
-                    <span style={styles.progressText}>{currentIndex + 1} / {displayCards.length}</span>
-                    <button 
-                      disabled={currentIndex === displayCards.length - 1} 
-                      onClick={() => { setIsFlipped(false); setCurrentIndex(p => p + 1); }} 
-                      style={styles.navBtn}
-                    >
-                      →
-                    </button>
-                  </div>
+              {/* 中文釋義輸入框（可自動填入，也可手動修改） */}
+              <div style={styles.inputRow}>
+                <input
+                  type="text"
+                  value={inputTrans}
+                  onChange={(e) => setInputTrans(e.target.value)}
+                  placeholder="中文釋義 (可手動修改)..."
+                  style={styles.cleanInput}
+                />
+                {inputWord && (
+                  <button
+                    type="button"
+                    onClick={() => speak(inputWord)}
+                    style={styles.audioIconBtn}
+                  >
+                    🔊
+                  </button>
                 )}
-              </>
-            )}
-          </section>
+              </div>
+
+              <button type="submit" style={styles.btnFull}>
+                ➕ 加入單字庫
+              </button>
+            </form>
+
+            {/* 所有單字列表 */}
+            <section style={styles.listSection}>
+              <div style={styles.listHeader}>
+                <h3 style={styles.listSectionTitle}>所有單字</h3>
+              </div>
+
+              <div style={styles.vocabList}>
+                {cards.length === 0 ? (
+                  <p style={styles.emptyListText}>尚無單字，請在上方輸入查詢或從下方匯入 CSV。</p>
+                ) : (
+                  cards.map((item) => (
+                    <div key={item.id} style={styles.vocabItem}>
+                      <div style={styles.vocabInfo}>
+                        <span style={styles.vocabWord}>{item.word}</span>
+                        <span style={styles.vocabTrans}>{item.translation}</span>
+                      </div>
+                      <div style={styles.vocabActions}>
+                        <button onClick={() => speak(item.word)} style={styles.iconActionBtn}>🔊</button>
+                        <button onClick={() => handleDeleteCard(item.id)} style={styles.deleteActionBtn}>🗑️</button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </section>
+          </div>
         )}
 
-        {/* 📋 單字庫清單管理與新增區 */}
-        <section style={styles.listSection}>
-          <h3 style={styles.listSectionTitle}>📋 所有單字庫 ({cards.length})</h3>
-          
-          {/* 手動快速新增區 */}
-          <form onSubmit={handleManualAddCard} style={styles.manualForm}>
-            <input
-              type="text"
-              placeholder="英文..."
-              value={manualWord}
-              onChange={(e) => setManualWord(e.target.value)}
-              style={styles.manualInput}
-            />
-            <input
-              type="text"
-              placeholder="中文翻譯..."
-              value={manualTrans}
-              onChange={(e) => setManualTrans(e.target.value)}
-              style={styles.manualInput}
-            />
-            <button type="submit" style={styles.manualAddBtn}>手動新增</button>
-          </form>
-
-          {/* 單字列表 */}
-          <div style={styles.vocabList}>
+        {/* ==================== 分頁二：翻牌測驗 ==================== */}
+        {activeTab === 'quiz' && (
+          <div style={styles.tabContent}>
             {cards.length === 0 ? (
-              <p style={styles.emptyListText}>尚無單字，請從上方搜尋新增或從下方匯入 CSV。</p>
+              <div style={styles.emptyState}>單字庫目前是空的，請先前往「單字庫」新增單字！</div>
             ) : (
-              cards.map((item) => (
-                <div key={item.id} style={styles.vocabItem}>
-                  <div style={styles.vocabInfo}>
-                    <span style={styles.vocabWord}>{item.word}</span>
-                    <span style={styles.vocabTrans}>{item.translation}</span>
+              <section style={styles.flashcardSection}>
+                <div style={styles.tabBar}>
+                  <div style={styles.tabGroup}>
+                    <span 
+                      style={filterMode === 'ALL' ? styles.activeTab : styles.tab}
+                      onClick={() => { setFilterMode('ALL'); setCurrentIndex(0); setIsFlipped(false); }}
+                    >
+                      全部 ({cards.length})
+                    </span>
+                    <span 
+                      style={filterMode === 'NEEDS_REVIEW' ? styles.activeTab : styles.tab}
+                      onClick={() => { setFilterMode('NEEDS_REVIEW'); setCurrentIndex(0); setIsFlipped(false); }}
+                    >
+                      待複習 ({cards.filter(c => c.needsReview).length})
+                    </span>
                   </div>
-                  <div style={styles.vocabActions}>
-                    <button onClick={() => speak(item.word)} style={styles.iconActionBtn}>🔊</button>
-                    <button onClick={() => handleDeleteCard(item.id)} style={styles.deleteActionBtn}>🗑️</button>
-                  </div>
+                  <button onClick={handleShuffle} style={styles.textBtn}>🔀 洗牌</button>
                 </div>
-              ))
+
+                {displayCards.length === 0 ? (
+                  <div style={styles.emptyState}>進度達成！目前無待複習單字 ✨</div>
+                ) : (
+                  <>
+                    <div 
+                      style={{
+                        ...styles.card3D,
+                        transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
+                      }}
+                      onClick={() => setIsFlipped(!isFlipped)}
+                    >
+                      {/* 正面 */}
+                      <div style={{ ...styles.cardFace, ...styles.cardFront }}>
+                        <span style={styles.cardWord}>{currentCard?.word}</span>
+                        <button onClick={(e) => { e.stopPropagation(); speak(currentCard?.word); }} style={styles.speakerPill}>
+                          🔊 重播發音
+                        </button>
+                        <span style={styles.flipHint}>點擊翻牌</span>
+                      </div>
+
+                      {/* 背面 */}
+                      <div style={{ ...styles.cardFace, ...styles.cardBack }}>
+                        <span style={styles.cardTranslation}>{currentCard?.translation}</span>
+                      </div>
+                    </div>
+
+                    {/* 評估或導覽 */}
+                    {isFlipped ? (
+                      <div style={styles.feedbackGroup}>
+                        <button onClick={() => handleMemoryFeedback('HARD')} style={styles.btnHard}>忘記</button>
+                        <button onClick={() => handleMemoryFeedback('GOOD')} style={styles.btnGood}>模糊</button>
+                        <button onClick={() => handleMemoryFeedback('EASY')} style={styles.btnEasy}>精通</button>
+                      </div>
+                    ) : (
+                      <div style={styles.navRow}>
+                        <button 
+                          disabled={currentIndex === 0} 
+                          onClick={() => { setIsFlipped(false); setCurrentIndex(p => p - 1); }} 
+                          style={styles.navBtn}
+                        >
+                          ←
+                        </button>
+                        <span style={styles.progressText}>{currentIndex + 1} / {displayCards.length}</span>
+                        <button 
+                          disabled={currentIndex === displayCards.length - 1} 
+                          onClick={() => { setIsFlipped(false); setCurrentIndex(p => p + 1); }} 
+                          style={styles.navBtn}
+                        >
+                          →
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </section>
             )}
           </div>
-        </section>
+        )}
 
         {/* 底部 CSV 備份管理 */}
         <footer style={styles.footer}>
@@ -381,28 +401,42 @@ export default function App() {
   );
 }
 
-// 樣式表
+// 精緻極簡樣式表
 const styles = {
   appContainer: { backgroundColor: '#F9FAFB', minHeight: '100vh', display: 'flex', justifyContent: 'center', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' },
-  mainContent: { width: '100%', maxWidth: '420px', padding: '30px 20px', display: 'flex', flexDirection: 'column', gap: '20px' },
-  header: { textAlign: 'center' },
-  brandTitle: { fontSize: '32px', fontWeight: '800', color: '#111827', margin: 0, letterSpacing: '-0.5px' },
-  inputCard: { backgroundColor: '#FFFFFF', borderRadius: '16px', padding: '16px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' },
-  inputGroup: { display: 'flex', alignItems: 'center', backgroundColor: '#F3F4F6', borderRadius: '12px', padding: '4px 12px' },
-  cleanInput: { flex: 1, border: 'none', background: 'transparent', padding: '10px 0', fontSize: '15px', color: '#111827', outline: 'none' },
-  btnIcon: { border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '16px' },
-  transResult: { marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #F3F4F6', display: 'flex', flexDirection: 'column', gap: '12px' },
-  transHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
-  transText: { fontSize: '16px', fontWeight: '600', color: '#111827' },
-  audioBtn: { border: 'none', background: '#F3F4F6', padding: '6px 12px', borderRadius: '20px', fontSize: '12px', color: '#374151', cursor: 'pointer' },
-  btnFull: { width: '100%', padding: '10px', backgroundColor: '#111827', color: '#FFF', border: 'none', borderRadius: '10px', fontWeight: '500', cursor: 'pointer', fontSize: '14px' },
+  mainContent: { width: '100%', maxWidth: '420px', padding: '24px 16px', display: 'flex', flexDirection: 'column', gap: '16px' },
+  header: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' },
+  brandTitle: { fontSize: '28px', fontWeight: '800', color: '#111827', margin: 0, letterSpacing: '-0.5px' },
+  mainNav: { display: 'flex', backgroundColor: '#E5E7EB', borderRadius: '12px', padding: '4px', width: '100%' },
+  mainNavBtn: { flex: 1, padding: '10px 0', border: 'none', background: 'transparent', color: '#6B7280', fontWeight: '600', fontSize: '14px', borderRadius: '8px', cursor: 'pointer', transition: 'all 0.2s' },
+  mainNavActive: { flex: 1, padding: '10px 0', border: 'none', background: '#FFFFFF', color: '#111827', fontWeight: '700', fontSize: '14px', borderRadius: '8px', cursor: 'pointer', boxShadow: '0 2px 6px rgba(0,0,0,0.06)' },
+  tabContent: { display: 'flex', flexDirection: 'column', gap: '16px' },
+  cardSectionTitle: { fontSize: '15px', fontWeight: '700', color: '#111827', margin: '0 0 12px 0' },
+  inputCard: { backgroundColor: '#FFFFFF', borderRadius: '16px', padding: '16px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column', gap: '12px' },
+  inputRow: { display: 'flex', gap: '8px', alignItems: 'center' },
+  cleanInput: { flex: 1, backgroundColor: '#F3F4F6', border: 'none', borderRadius: '10px', padding: '12px', fontSize: '14px', color: '#111827', outline: 'none' },
+  btnTranslate: { padding: '0 14px', height: '42px', backgroundColor: '#E5E7EB', color: '#374151', border: 'none', borderRadius: '10px', fontWeight: '600', fontSize: '13px', cursor: 'pointer', whiteSpace: 'nowrap' },
+  audioIconBtn: { border: 'none', background: '#F3F4F6', height: '42px', width: '42px', borderRadius: '10px', cursor: 'pointer', fontSize: '16px' },
+  btnFull: { width: '100%', padding: '12px', backgroundColor: '#111827', color: '#FFF', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '14px', marginTop: '4px' },
+  listSection: { backgroundColor: '#FFFFFF', borderRadius: '16px', padding: '16px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' },
+  listHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' },
+  listSectionTitle: { fontSize: '15px', fontWeight: '700', color: '#111827', margin: 0 },
+  vocabList: { display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '350px', overflowY: 'auto' },
+  emptyListText: { fontSize: '13px', color: '#9CA3AF', textAlign: 'center', margin: '20px 0' },
+  vocabItem: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', backgroundColor: '#F9FAFB', borderRadius: '10px' },
+  vocabInfo: { display: 'flex', flexDirection: 'column', gap: '2px' },
+  vocabWord: { fontSize: '15px', fontWeight: '600', color: '#111827' },
+  vocabTrans: { fontSize: '13px', color: '#6B7280' },
+  vocabActions: { display: 'flex', gap: '8px' },
+  iconActionBtn: { border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '15px' },
+  deleteActionBtn: { border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '15px' },
   flashcardSection: { display: 'flex', flexDirection: 'column', gap: '12px' },
   tabBar: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 4px' },
   tabGroup: { display: 'flex', gap: '16px' },
   tab: { fontSize: '14px', color: '#9CA3AF', cursor: 'pointer', fontWeight: '500' },
   activeTab: { fontSize: '14px', color: '#111827', fontWeight: '700', borderBottom: '2px solid #111827', paddingBottom: '2px', cursor: 'pointer' },
   textBtn: { border: 'none', background: 'transparent', color: '#6B7280', fontSize: '13px', cursor: 'pointer' },
-  emptyState: { textAlign: 'center', padding: '30px 0', color: '#9CA3AF', fontSize: '14px' },
+  emptyState: { textAlign: 'center', padding: '40px 0', color: '#9CA3AF', fontSize: '14px', backgroundColor: '#FFFFFF', borderRadius: '16px' },
   card3D: { width: '100%', height: '220px', perspective: '1000px', position: 'relative', transformStyle: 'preserve-3d', transition: 'transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)', cursor: 'pointer' },
   cardFace: { position: 'absolute', width: '100%', height: '100%', backfaceVisibility: 'hidden', borderRadius: '20px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', boxShadow: '0 10px 30px rgba(0,0,0,0.04)', padding: '24px', boxSizing: 'border-box' },
   cardFront: { backgroundColor: '#FFFFFF' },
@@ -418,20 +452,6 @@ const styles = {
   btnHard: { padding: '10px', border: 'none', borderRadius: '10px', backgroundColor: '#FEE2E2', color: '#991B1B', fontWeight: '600', cursor: 'pointer' },
   btnGood: { padding: '10px', border: 'none', borderRadius: '10px', backgroundColor: '#FEF3C7', color: '#92400E', fontWeight: '600', cursor: 'pointer' },
   btnEasy: { padding: '10px', border: 'none', borderRadius: '10px', backgroundColor: '#D1FAE5', color: '#065F46', fontWeight: '600', cursor: 'pointer' },
-  listSection: { backgroundColor: '#FFFFFF', borderRadius: '16px', padding: '16px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', marginTop: '10px' },
-  listSectionTitle: { fontSize: '15px', fontWeight: '700', color: '#111827', margin: '0 0 12px 0' },
-  manualForm: { display: 'flex', gap: '8px', marginBottom: '12px' },
-  manualInput: { flex: 1, padding: '8px 10px', border: '1px solid #E5E7EB', borderRadius: '8px', fontSize: '13px', outline: 'none' },
-  manualAddBtn: { padding: '8px 12px', border: 'none', background: '#374151', color: '#FFF', borderRadius: '8px', fontSize: '12px', cursor: 'pointer', whiteSpace: 'nowrap' },
-  vocabList: { display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '250px', overflowY: 'auto' },
-  emptyListText: { fontSize: '13px', color: '#9CA3AF', textAlign: 'center', margin: '12px 0' },
-  vocabItem: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', backgroundColor: '#F9FAFB', borderRadius: '10px' },
-  vocabInfo: { display: 'flex', flexDirection: 'column', gap: '2px' },
-  vocabWord: { fontSize: '14px', fontWeight: '600', color: '#111827' },
-  vocabTrans: { fontSize: '12px', color: '#6B7280' },
-  vocabActions: { display: 'flex', gap: '6px' },
-  iconActionBtn: { border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '14px' },
-  deleteActionBtn: { border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '14px' },
   footer: { display: 'flex', justifyContent: 'center', marginTop: '10px' },
   csvActions: { display: 'flex', gap: '8px', alignItems: 'center', color: '#D1D5DB', fontSize: '12px' },
   footerLink: { border: 'none', background: 'transparent', color: '#9CA3AF', fontSize: '12px', cursor: 'pointer' },
