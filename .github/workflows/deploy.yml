@@ -4,7 +4,6 @@ on:
   push:
     branches: [ main ]
 
-# 🆕 直接在 YAML 設定檔中給予 Actions 寫入權限
 permissions:
   contents: write
 
