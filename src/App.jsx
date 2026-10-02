@@ -15,8 +15,25 @@ export default function App() {
   const [filterMode, setFilterMode] = useState('ALL');
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
+  const [autoPlay, setAutoPlay] = useState(true); // 🔊 自动发音开关
+  const [voices, setVoices] = useState([]);
 
   const fileInputRef = useRef(null);
+
+  // 🔊 1. 动态加载系统语音库
+  useEffect(() => {
+    const loadVoices = () => {
+      const availVoices = window.speechSynthesis.getVoices();
+      if (availVoices.length > 0) {
+        setVoices(availVoices);
+      }
+    };
+
+    loadVoices();
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+    }
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('flashcards_v3', JSON.stringify(cards));
@@ -29,36 +46,53 @@ export default function App() {
 
   const currentCard = displayCards[currentIndex];
 
+  // 🔊 2. 增强型发音函数
   const speak = (text) => {
-    if (!text) return;
+    if (!text || !('speechSynthesis' in window)) return;
+    
+    // 取消当前正在播放的排队语音
     window.speechSynthesis.cancel();
+
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'en-US';
+    utterance.rate = 0.9; // 稍微放慢语速，更清晰
+
+    // 优先匹配高质量英文发音引擎
+    if (voices.length > 0) {
+      const preferredVoice = voices.find(
+        (v) => v.lang.includes('en') && (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Samantha'))
+      ) || voices.find((v) => v.lang.startsWith('en'));
+
+      if (preferredVoice) {
+        utterance.voice = preferredVoice;
+      }
+    }
+
     window.speechSynthesis.speak(utterance);
   };
 
-  // 切換卡片時自動發音，並確保卡片翻回正面
+  // 切換卡片時的邏輯
   useEffect(() => {
     if (activeTab === 'quiz' && currentCard) {
       setIsFlipped(false); // 每次切換卡片均確保為正面
-      speak(currentCard.word);
+      if (autoPlay) {
+        speak(currentCard.word);
+      }
     }
   }, [currentIndex, filterMode, activeTab]);
 
-  // 🌐 穩定直連翻譯機制 (Google Translate Web API)
+  // 🌐 翻譯機制
   const handleTranslate = async () => {
     const cleanedWord = inputWord.trim();
     if (!cleanedWord) return;
     setLoading(true);
 
     try {
-      // 直連 Google 官方 translate_a 介面 (不需要第三方 CORS 代理)
       const res = await fetch(
         `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=zh-TW&dt=t&q=${encodeURIComponent(cleanedWord)}`
       );
       if (res.ok) {
         const data = await res.json();
-        // 提取主要翻譯結果
         if (data && data[0] && Array.isArray(data[0])) {
           const translatedText = data[0].map((item) => item[0]).join('');
           if (translatedText) {
@@ -89,7 +123,6 @@ export default function App() {
     }
   };
 
-  // 🛡️ 新增/更新單字功能 (強制轉小寫 + 防重複邏輯)
   const handleAddCard = (e) => {
     e.preventDefault();
     const cleanedWord = inputWord.trim().toLowerCase();
@@ -147,14 +180,12 @@ export default function App() {
     setCards(shuffled);
     setCurrentIndex(0);
     setIsFlipped(false);
-    if (shuffled[0]) speak(shuffled[0].word);
+    if (shuffled[0] && autoPlay) speak(shuffled[0].word);
   };
 
-  // 🎯 記憶反饋：先翻回正面再切換至下一張卡片
   const handleMemoryFeedback = (quality) => {
     if (!currentCard) return;
 
-    // 1. 先重置翻牌狀態為正面 (正面 = false)
     setIsFlipped(false);
 
     let newLevel = currentCard.level || 0;
@@ -169,7 +200,6 @@ export default function App() {
 
     setCards(updatedCards);
 
-    // 2. 延遲小段時間切換索引，確保翻牌動畫流暢不露餡
     setTimeout(() => {
       if (currentIndex < displayCards.length - 1) {
         setCurrentIndex((prev) => prev + 1);
@@ -254,7 +284,11 @@ export default function App() {
             </button>
             <button
               style={activeTab === 'quiz' ? styles.mainNavActive : styles.mainNavBtn}
-              onClick={() => setActiveTab('quiz')}
+              onClick={() => {
+                setActiveTab('quiz');
+                // 点击切换 Tab 时主动触发一次声音以获得浏览器播放授权
+                if (currentCard && autoPlay) speak(currentCard.word);
+              }}
             >
               🗂️ 翻牌測驗
             </button>
@@ -357,7 +391,15 @@ export default function App() {
                       待複習 ({cards.filter(c => c.needsReview).length})
                     </span>
                   </div>
-                  <button onClick={handleShuffle} style={styles.textBtn}>🔀 洗牌</button>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <button 
+                      onClick={() => setAutoPlay(!autoPlay)} 
+                      style={{ ...styles.textBtn, color: autoPlay ? '#111827' : '#9CA3AF' }}
+                    >
+                      {autoPlay ? '🔊 自動發音' : '🔇 靜音模式'}
+                    </button>
+                    <button onClick={handleShuffle} style={styles.textBtn}>🔀 洗牌</button>
+                  </div>
                 </div>
 
                 {displayCards.length === 0 ? (
